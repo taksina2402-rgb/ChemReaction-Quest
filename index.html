@@ -1,0 +1,815 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ChemReaction Quest: ผจญภัยไขปริศนาปฏิกิริยาเคมี</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Three.js for AR/3D Effects -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <!-- FontAwesome icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Google Fonts: Kanit -->
+    <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Kanit', sans-serif;
+            background: radial-gradient(circle at center, #1e1b4b, #0f172a);
+            color: #f8fafc;
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+
+        /* 3D Glassmorphism Cards */
+        .glass-panel {
+            background: rgba(30, 41, 59, 0.75);
+            backdrop-filter: blur(16px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5);
+        }
+
+        .glass-btn {
+            background: linear-gradient(135deg, rgba(59, 130, 246, 0.8), rgba(147, 51, 234, 0.8));
+            box-shadow: 0 4px 15px rgba(147, 51, 234, 0.4);
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .glass-btn:hover {
+            transform: translateY(-3px) scale(1.02);
+            box-shadow: 0 8px 25px rgba(147, 51, 234, 0.6);
+        }
+
+        .glass-btn:active {
+            transform: translateY(1px);
+        }
+
+        /* Card Flip Animation for Level 1 */
+        .perspective-1000 {
+            perspective: 1000px;
+        }
+        .flip-card-inner {
+            position: relative;
+            width: 100%;
+            height: 100%;
+            text-align: center;
+            transition: transform 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+            transform-style: preserve-3d;
+        }
+        .flip-card.flipped .flip-card-inner {
+            transform: rotateY(180deg);
+        }
+        .flip-card-front, .flip-card-back {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            -webkit-backface-visibility: hidden;
+            backface-visibility: hidden;
+            border-radius: 1rem;
+        }
+        .flip-card-back {
+            transform: rotateY(180deg);
+        }
+
+        /* Custom Pulse Animations */
+        @keyframes neonGlow {
+            0%, 100% { filter: drop-shadow(0 0 15px rgba(59, 130, 246, 0.8)); }
+            50% { filter: drop-shadow(0 0 30px rgba(236, 72, 153, 0.9)); }
+        }
+
+        .neon-glow {
+            animation: neonGlow 3s infinite alternate;
+        }
+
+        /* Scanline effect for AR Camera View */
+        .scanline {
+            background: linear-gradient(to bottom, rgba(255,255,255,0), rgba(59, 130, 246, 0.2) 50%, rgba(255,255,255,0));
+            background-size: 100% 8px;
+        }
+
+        /* Floating Animation */
+        @keyframes float {
+            0%, 100% { transform: translateY(0px) rotate(0deg); }
+            50% { transform: translateY(-10px) rotate(3deg); }
+        }
+        .animate-float {
+            animation: float 4s ease-in-out infinite;
+        }
+    </style>
+</head>
+<body class="flex flex-col min-h-screen justify-between relative overflow-hidden">
+
+    <!-- AR Canvas Background (Three.js 3D Interactive Lab Simulation) -->
+    <div id="ar-canvas-container" class="fixed inset-0 z-0 pointer-events-none opacity-40"></div>
+
+    <!-- UI Overlay Header -->
+    <header class="relative z-10 w-full max-w-5xl mx-auto p-4 flex justify-between items-center">
+        <div class="flex items-center space-x-3">
+            <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-cyan-400 to-blue-600 flex items-center justify-center text-white text-xl font-bold shadow-lg">
+                <i class="fa-solid fa-flask"></i>
+            </div>
+            <div>
+                <h1 class="text-xl font-extrabold tracking-wider bg-clip-text text-transparent bg-gradient-to-r from-cyan-400 via-sky-300 to-purple-400">CHEMREACTION QUEST</h1>
+                <p class="text-xs text-slate-400">การทดลองปฏิกิริยาเคมีเสมือนจริง (AR Lab)</p>
+            </div>
+        </div>
+
+        <!-- Global Score & Timer Badge (Visible during gameplay) -->
+        <div id="game-status-bar" class="hidden flex items-center space-x-4 glass-panel px-4 py-2 rounded-2xl border border-cyan-500/30">
+            <div class="flex items-center space-x-2 text-amber-400 font-bold">
+                <i class="fa-solid fa-star text-lg"></i>
+                <span id="current-score" class="text-xl">0</span>
+            </div>
+            <div class="h-6 w-px bg-slate-700"></div>
+            <div class="flex items-center space-x-2 text-cyan-400 font-bold">
+                <i class="fa-solid fa-stopwatch text-lg"></i>
+                <span id="timer-display" class="text-xl">00:00</span>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Game Container -->
+    <main class="relative z-10 flex-1 flex items-center justify-center p-4">
+        
+        <!-- ================= PAGE 1: START SCREEN / COVER ================= -->
+        <section id="cover-screen" class="w-full max-w-2xl text-center space-y-6">
+            <div class="glass-panel p-8 md:p-12 rounded-3xl border border-white/10 relative overflow-hidden shadow-2xl">
+                <!-- Decorative AR Grid lines -->
+                <div class="absolute inset-0 bg-grid-white/[0.03] bg-[size:30px_30px] pointer-events-none"></div>
+                
+                <!-- Floating Icons -->
+                <div class="inline-block p-4 rounded-full bg-cyan-500/10 mb-4 animate-float border border-cyan-500/30 text-cyan-400 text-5xl">
+                    <i class="fa-solid fa-flask-vial"></i>
+                </div>
+
+                <h1 class="text-4xl md:text-5xl font-black text-white tracking-tight leading-tight mb-4">
+                    ผจญภัยไขปริศนา<br>
+                    <span class="bg-clip-text text-transparent bg-gradient-to-r from-cyan-400 via-purple-400 to-pink-500 neon-glow">
+                        การเกิดปฏิกิริยาเคมี
+                    </span>
+                </h1>
+                
+                <p class="text-slate-300 text-base md:text-lg max-w-lg mx-auto mb-8 font-light">
+                    แปลงร่างเป็นนักวิทยาศาสตร์ตะลุย 3 ด่านหฤหรรษ์! พิชิตคำนวณมวลสาร ดุลสมการเคมี และไขกฎทรงมวลในแล็บ AR สุดล้ำ
+                </p>
+
+                <!-- Start Button -->
+                <button onclick="startGame()" class="glass-btn w-full md:w-auto px-10 py-4 text-xl font-bold text-white rounded-2xl flex items-center justify-center space-x-3 mx-auto shadow-xl group">
+                    <span>เข้าสู่ห้องแล็บ AR</span>
+                    <i class="fa-solid fa-atom text-2xl group-hover:rotate-180 transition-transform duration-700"></i>
+                </button>
+
+                <!-- AR Status Simulation Indicator -->
+                <div class="mt-8 flex items-center justify-center space-x-2 text-xs text-emerald-400 bg-emerald-950/40 py-2 px-4 rounded-full border border-emerald-500/30 w-max mx-auto">
+                    <span class="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
+                    <span>ระบบจำลองกล้อง AR Camera Ready</span>
+                </div>
+            </div>
+        </section>
+
+        <!-- ================= GAMEPLAY CONTAINER ================= -->
+        <section id="game-container" class="hidden w-full max-w-4xl">
+            <div class="glass-panel p-6 md:p-8 rounded-3xl border border-white/10 relative">
+
+                <!-- Level Header Indicator -->
+                <div class="flex flex-wrap justify-between items-center mb-6 gap-2">
+                    <div>
+                        <span id="level-badge" class="px-3 py-1 rounded-full text-xs font-bold bg-cyan-500/20 text-cyan-300 border border-cyan-400/30">
+                            LEVEL 1
+                        </span>
+                        <h2 id="level-title" class="text-2xl font-bold text-white mt-1">ชื่อด่าน</h2>
+                    </div>
+                    <!-- AR Camera Overlay Simulation Toggle -->
+                    <div class="flex items-center space-x-2 text-xs text-slate-400 bg-slate-800/80 px-3 py-1.5 rounded-xl border border-slate-700">
+                        <i class="fa-solid fa-camera text-cyan-400"></i>
+                        <span>AR Field Vision: Active</span>
+                    </div>
+                </div>
+
+                <!-- Level 1 Content: Card Matching / Flip -->
+                <div id="level-1-view" class="hidden">
+                    <p class="text-slate-300 mb-4 text-sm md:text-base">
+                        <i class="fa-solid fa-circle-info text-cyan-400 mr-2"></i>
+                        เปิดแผ่นป้ายจับคู่สารตั้งต้น สมการเคมี และผลิตภัณฑ์ที่สอดคล้องกัน!
+                    </p>
+                    <div id="card-grid" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 md:gap-4">
+                        <!-- Cards dynamically populated -->
+                    </div>
+                </div>
+
+                <!-- Level 2 Content: Matching Drag & Drop / Selection -->
+                <div id="level-2-view" class="hidden">
+                    <p class="text-slate-300 mb-4 text-sm md:text-base">
+                        <i class="fa-solid fa-scale-balanced text-cyan-400 mr-2"></i>
+                        ตามกฎทรงมวล มวลรวมของสารตั้งต้น = มวลรวมของผลิตภัณฑ์ เลือกระบุมวลของสารในช่องว่างให้ถูกต้อง!
+                    </p>
+                    <div id="mass-balance-list" class="space-y-4">
+                        <!-- Mass balance dynamic elements -->
+                    </div>
+                </div>
+
+                <!-- Level 3 Content: 4-Option Quiz -->
+                <div id="level-3-view" class="hidden">
+                    <div class="flex justify-between text-xs text-slate-400 mb-2 font-bold">
+                        <span>คำถามข้อที่ <span id="quiz-current-num">1</span>/5</span>
+                        <span id="quiz-progress-percent">20%</span>
+                    </div>
+                    <div class="w-full bg-slate-700/50 rounded-full h-2 mb-6 overflow-hidden">
+                        <div id="quiz-progress-bar" class="bg-gradient-to-r from-cyan-400 to-purple-500 h-2 rounded-full w-1/5 transition-all duration-300"></div>
+                    </div>
+
+                    <div id="quiz-card" class="bg-slate-800/60 p-6 rounded-2xl border border-slate-700 mb-6">
+                        <h3 id="quiz-question" class="text-lg md:text-xl font-bold text-white mb-4">
+                            โจทย์คำถาม...
+                        </h3>
+                        <div id="quiz-options" class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                            <!-- Quiz options populated dynamically -->
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Bottom Action Controls -->
+                <div id="level-action-bar" class="mt-6 flex justify-end">
+                    <button id="btn-next-level" onclick="nextLevel()" class="hidden glass-btn px-6 py-2.5 rounded-xl text-white font-bold flex items-center space-x-2">
+                        <span>ผ่านด่านถัดไป</span>
+                        <i class="fa-solid fa-arrow-right"></i>
+                    </button>
+                </div>
+
+            </div>
+        </section>
+
+        <!-- ================= PAGE 3: SUMMARY & SCORE BOARD ================= -->
+        <section id="summary-screen" class="hidden w-full max-w-xl text-center">
+            <div class="glass-panel p-8 md:p-10 rounded-3xl border border-white/10 relative overflow-hidden">
+                <div class="w-20 h-20 rounded-full bg-amber-500/20 border-2 border-amber-400 flex items-center justify-center text-amber-400 text-4xl mx-auto mb-4 neon-glow">
+                    <i class="fa-solid fa-trophy"></i>
+                </div>
+                
+                <h2 class="text-3xl font-extrabold text-white mb-2">สรุปผลการทดลองเคมี</h2>
+                <p class="text-slate-400 text-sm mb-6">ยินดีด้วย! คุณผ่านการทดสอบในแล็บปฏิกิริยาเคมีครบทุกด่านแล้ว</p>
+
+                <div class="grid grid-cols-2 gap-3 mb-6">
+                    <div class="bg-slate-800/60 p-4 rounded-2xl border border-slate-700 text-center">
+                        <span class="text-xs text-slate-400 uppercase tracking-wider block mb-1">คะแนนรวมด่าน</span>
+                        <span id="base-score" class="text-2xl font-bold text-cyan-400">0</span>
+                    </div>
+                    <div class="bg-slate-800/60 p-4 rounded-2xl border border-slate-700 text-center">
+                        <span class="text-xs text-slate-400 uppercase tracking-wider block mb-1">คะแนนโบนัสความไว</span>
+                        <span id="bonus-score" class="text-2xl font-bold text-emerald-400">+0</span>
+                    </div>
+                </div>
+
+                <div class="bg-gradient-to-r from-purple-900/40 to-blue-900/40 p-6 rounded-2xl border border-purple-500/30 mb-8">
+                    <span class="text-sm text-purple-300 font-semibold uppercase tracking-widest block mb-1">คะแนนรวมสุทธิ (TOTAL SCORE)</span>
+                    <span id="total-score" class="text-4xl md:text-5xl font-black bg-clip-text text-transparent bg-gradient-to-r from-amber-300 via-amber-400 to-yellow-500">0</span>
+                    <p id="evaluation-text" class="text-xs text-slate-300 mt-2">สุดยอดนักเคมีระดับเซียน!</p>
+                </div>
+
+                <button onclick="startGame()" class="glass-btn w-full py-4 text-lg font-bold text-white rounded-2xl flex items-center justify-center space-x-2">
+                    <i class="fa-solid fa-rotate-right"></i>
+                    <span>เล่นใหม่อีกครั้ง (สลับโจทย์ใหม่)</span>
+                </button>
+            </div>
+        </section>
+
+    </main>
+
+    <!-- Footer -->
+    <footer class="relative z-10 w-full text-center py-4 text-xs text-slate-500 border-t border-slate-800/50">
+        ChemReaction Quest &copy; Interactive Science AR Learning Experience
+    </footer>
+
+    <!-- Custom Dialog / Notification Modal -->
+    <div id="custom-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
+        <div class="glass-panel p-6 rounded-2xl max-w-sm w-full text-center border border-white/20 shadow-2xl">
+            <div id="modal-icon" class="text-4xl mb-3 text-cyan-400">
+                <i class="fa-solid fa-circle-check"></i>
+            </div>
+            <h3 id="modal-title" class="text-xl font-bold text-white mb-2">แจ้งเตือน</h3>
+            <p id="modal-msg" class="text-sm text-slate-300 mb-6">ข้อความแจ้งเตือน...</p>
+            <button onclick="closeModal()" class="w-full py-2.5 bg-cyan-600 hover:bg-cyan-500 text-white font-bold rounded-xl text-sm transition">
+                ตกลง
+            </button>
+        </div>
+    </div>
+
+    <!-- JavaScript Logic -->
+    <script>
+        /* ================= GAME DATA & STATE ================= */
+        // Raw Data based on attached learning materials
+        const LEVEL_1_POOLS = [
+            { id: 1, text: "แก๊สไฮโดรเจน (H₂)", pairId: 101, type: "reactant" },
+            { id: 101, text: "ทำปฏิกิริยากับ แก๊สออกซิเจน (O₂) ➔ ไอน้ำ (H₂O)", pairId: 1, type: "product" },
+            { id: 2, text: "ผงฟู (NaHCO₃)", pairId: 102, type: "reactant" },
+            { id: 102, text: "สลายด้วยความร้อน ➔ โซเดียมออกไซด์ + น้ำ + CO₂", pairId: 2, type: "product" },
+            { id: 3, text: "แก๊สมีเทน (CH₄) + ออกซิเจน", pairId: 103, type: "reactant" },
+            { id: 103, text: "เผาไหม้สมบูรณ์ ➔ ไอน้ำ (H₂O) + CO₂", pairId: 3, type: "product" },
+            { id: 4, text: "กรดไฮโดรคลอริก (HCl) + โซเดียมไฮดรอกไซด์", pairId: 104, type: "reactant" },
+            { id: 104, text: "ได้ เกลือแกง (NaCl) + น้ำ (H₂O)", pairId: 4, type: "product" }
+        ];
+
+        const LEVEL_2_POOLS = [
+            {
+                id: 1,
+                title: "การเผาไหม้แก๊สบิวเทนในระบบปิด",
+                equation: "บิวเทน (116 g) + ออกซิเจน (416 g) ➔ คาร์บอนไดออกไซด์ (?) + น้ำ (180 g)",
+                missingField: "คาร์บอนไดออกไซด์",
+                correctValue: 352, // 116 + 416 - 180 = 352
+                options: [352, 400, 532, 280],
+                unit: "กรัม"
+            },
+            {
+                id: 2,
+                title: "ปฏิกิริยาระหว่างโลหะสังกะสีกับกรดไฮโดรคลอริก",
+                equation: "สังกะสี (?) + กรดไฮโดรคลอริก (73.0 g) ➔ ซิงค์คลอไรด์ (136.4 g) + แก๊สไฮโดรเจน (2.0 g)",
+                missingField: "โลหะสังกะสี",
+                correctValue: 65.4, // 136.4 + 2.0 - 73.0 = 65.4
+                options: [65.4, 75.0, 50.4, 138.4],
+                unit: "กรัม"
+            },
+            {
+                id: 3,
+                title: "การสลายตัวของผงฟูด้วยความร้อน",
+                equation: "ผงฟู (?) ➔ โซเดียมออกไซด์ (62 g) + น้ำ (18 g) + CO₂ (88 g)",
+                missingField: "ผงฟู",
+                correctValue: 168, // 62 + 18 + 88 = 168
+                options: [168, 150, 120, 180],
+                unit: "กรัม"
+            },
+            {
+                id: 4,
+                title: "สะเทินกรดซัลฟิวริกด้วยโซเดียมไฮดรอกไซด์",
+                equation: "กรดซัลฟิวริก (98 g) + โซเดียมไฮดรอกไซด์ (80 g) ➔ โซเดียมซัลเฟต (142 g) + น้ำ (?)",
+                missingField: "น้ำ",
+                correctValue: 36, // 98 + 80 - 142 = 36
+                options: [36, 46, 178, 28],
+                unit: "กรัม"
+            }
+        ];
+
+        const LEVEL_3_POOLS = [
+            {
+                question: "ข้อใดกล่าวถึงความหมายของ 'สารตั้งต้น (Reactant)' ได้ถูกต้องที่สุดตามหลักเคมี?",
+                options: [
+                    "สารใหม่ที่เกิดขึ้นหลังจากการเกิดปฏิกิริยาเคมี",
+                    "สารที่เข้าทำปฏิกิริยากัน อาจประกอบด้วยสารชนิดเดียวหรือตั้งแต่ 2 ชนิดขึ้นไป",
+                    "สารที่มีมวลเพิ่มขึ้นเสมอหลังเกิดปฏิกิริยาเคมี",
+                    "สารที่ทำหน้าที่เป็นตัวเร่งให้ปฏิกิริยาเกิดเร็วขึ้นเท่านั้น"
+                ],
+                answerIndex: 1
+            },
+            {
+                question: "สมการเคมีที่ดุลถูกต้องสำหรับการเกิดไอน้ำจากแก๊สไฮโดรเจนและแก๊สออกซิเจนคือข้อใด?",
+                options: [
+                    "H₂ + O₂ ➔ H₂O",
+                    "2H₂ + O₂ ➔ 2H₂O",
+                    "H₂ + 2O₂ ➔ H₂O₂",
+                    "2H₂ + 2O₂ ➔ 2H₂O"
+                ],
+                answerIndex: 1
+            },
+            {
+                question: "ข้อใดเป็นสมการเคมีที่ดุลแล้วของการสลายตัวของผงฟู (NaHCO₃)?",
+                options: [
+                    "2NaHCO₃(s) ➔ Na₂O(s) + H₂O(l) + 2CO₂(g)",
+                    "NaHCO₃(s) ➔ Na₂O(s) + H₂O(l) + CO₂(g)",
+                    "2NaHCO₃(s) ➔ 2Na₂O(s) + H₂O(l) + CO₂(g)",
+                    "NaHCO₃(s) ➔ NaO(s) + H₂O(l) + 2CO₂(g)"
+                ],
+                answerIndex: 0
+            },
+            {
+                question: "ตาม 'กฎทรงมวล' ปรากฏการณ์ใดจะเกิดขึ้นในปฏิกิริยาเคมีที่ดำเนินไปในระบบปิด?",
+                options: [
+                    "มวลของสารตั้งต้นจะน้อยกว่ามวลของผลิตภัณฑ์เสมอ",
+                    "มวลรวมของสารทั้งหมดก่อนเกิดปฏิกิริยา จะเท่ากับมวลรวมของสารทั้งหมดหลังเกิดปฏิกิริยา",
+                    "มวลของแก๊สที่เกิดขึ้นจะหายไปจากระบบทั้งหมด",
+                    "มวลรวมของผลิตภัณฑ์จะเพิ่มขึ้นเป็น 2 เท่าเสมอ"
+                ],
+                answerIndex: 1
+            },
+            {
+                question: "เมื่อทำปฏิกิริยาระหว่าง โลหะโพแทสเซียม (K) กับน้ำ (H₂O) จะได้ผลิตภัณฑ์เป็นสารใด?",
+                options: [
+                    "สารละลายโพแทสเซียมไฮดรอกไซด์ (KOH) และ แก๊สไฮโดรเจน (H₂)",
+                    "สารละลายเกลือแกง (NaCl) และ แก๊สออกซิเจน (O₂)",
+                    "แก๊สคาร์บอนไดออกไซด์ (CO₂) และ น้ำ (H₂O)",
+                    "โพแทสเซียมออกไซด์ (K₂O) เพียงอย่างเดียว"
+                ],
+                answerIndex: 0
+            }
+        ];
+
+        // State variables
+        let currentLevel = 1;
+        let score = 0;
+        let timerInterval = null;
+        let secondsElapsed = 0;
+        
+        // Level 1 states
+        let flippedCards = [];
+        let matchedPairsCount = 0;
+        let level1CardsData = [];
+
+        // Level 2 states
+        let level2Answers = {};
+
+        // Level 3 states
+        let level3Questions = [];
+        let level3CurrentIndex = 0;
+        let level3Score = 0;
+
+        /* ================= UTILITY FUNCTIONS ================= */
+        // Shuffle array using Fisher-Yates algorithm
+        function shuffleArray(array) {
+            const arr = [...array];
+            for (let i = arr.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [arr[i], arr[j]] = [arr[j], arr[i]];
+            }
+            return arr;
+        }
+
+        function formatTimer(sec) {
+            const m = Math.floor(sec / 60).toString().padStart(2, '0');
+            const s = (sec % 60).toString().padStart(2, '0');
+            return `${m}:${s}`;
+        }
+
+        function showModal(title, msg, iconClass = "fa-circle-check text-cyan-400") {
+            document.getElementById('modal-title').innerText = title;
+            document.getElementById('modal-msg').innerText = msg;
+            document.getElementById('modal-icon').innerHTML = `<i class="fa-solid ${iconClass}"></i>`;
+            document.getElementById('custom-modal').classList.remove('hidden');
+        }
+
+        function closeModal() {
+            document.getElementById('custom-modal').classList.add('hidden');
+        }
+
+        function updateScoreDisplay() {
+            document.getElementById('current-score').innerText = score;
+        }
+
+        /* ================= GAME CONTROLLER ================= */
+        function startGame() {
+            // Reset states
+            score = 0;
+            secondsElapsed = 0;
+            currentLevel = 1;
+            updateScoreDisplay();
+
+            // Hide cover / summary, show game container
+            document.getElementById('cover-screen').classList.add('hidden');
+            document.getElementById('summary-screen').classList.add('hidden');
+            document.getElementById('game-container').classList.remove('hidden');
+            document.getElementById('game-status-bar').classList.remove('hidden');
+
+            // Timer start
+            if (timerInterval) clearInterval(timerInterval);
+            timerInterval = setInterval(() => {
+                secondsElapsed++;
+                document.getElementById('timer-display').innerText = formatTimer(secondsElapsed);
+            }, 1000);
+
+            loadLevel(1);
+        }
+
+        function loadLevel(levelNum) {
+            currentLevel = levelNum;
+            document.getElementById('btn-next-level').classList.add('hidden');
+
+            // Hide all level views
+            document.getElementById('level-1-view').classList.add('hidden');
+            document.getElementById('level-2-view').classList.add('hidden');
+            document.getElementById('level-3-view').classList.add('hidden');
+
+            if (levelNum === 1) {
+                document.getElementById('level-badge').innerText = 'LEVEL 1 : เปิดแผ่นป้าย';
+                document.getElementById('level-title').innerText = 'เปิดแผ่นป้ายจับคู่ปฏิกิริยา';
+                document.getElementById('level-1-view').classList.remove('hidden');
+                setupLevel1();
+            } else if (levelNum === 2) {
+                document.getElementById('level-badge').innerText = 'LEVEL 2 : จับคู่คำนวณมวล';
+                document.getElementById('level-title').innerText = 'ดุลมวลสารตามกฎทรงมวล';
+                document.getElementById('level-2-view').classList.remove('hidden');
+                setupLevel2();
+            } else if (levelNum === 3) {
+                document.getElementById('level-badge').innerText = 'LEVEL 3 : แบบทดสอบความรู้';
+                document.getElementById('level-title').innerText = 'แบบทดสอบปรนัย 4 ตัวเลือก';
+                document.getElementById('level-3-view').classList.remove('hidden');
+                setupLevel3();
+            }
+        }
+
+        function nextLevel() {
+            if (currentLevel < 3) {
+                loadLevel(currentLevel + 1);
+            } else {
+                finishGame();
+            }
+        }
+
+        function finishGame() {
+            clearInterval(timerInterval);
+            document.getElementById('game-container').classList.add('hidden');
+            document.getElementById('game-status-bar').classList.add('hidden');
+            document.getElementById('summary-screen').classList.remove('hidden');
+
+            // Calculate Speed Bonus
+            // Faster completion (< 120s) gives maximum bonus 200 pts
+            let bonus = Math.max(0, 300 - Math.floor(secondsElapsed * 1.5));
+            let total = score + bonus;
+
+            document.getElementById('base-score').innerText = score;
+            document.getElementById('bonus-score').innerText = `+${bonus}`;
+            document.getElementById('total-score').innerText = total;
+
+            let evalText = "ความสามารถอยู่ในระดับเยี่ยมยอด!";
+            if (total >= 700) evalText = "🏆 ยอดเยี่ยม! คุณคือ 'ปรมาจารย์เคมีเกียรตินิยม'";
+            else if (total >= 400) evalText = "🧪 ผ่านเกณฑ์! คุณมีความเข้าใจในเรื่องปฏิกิริยาเคมีดีมาก";
+            else evalText = "📚 พยายามอีกนิด! ลองทบทวนเนื้อหาแล้วมาเล่นใหม่อีกครั้งนะ";
+
+            document.getElementById('evaluation-text').innerText = evalText;
+        }
+
+        /* ================= LEVEL 1 LOGIC ================= */
+        function setupLevel1() {
+            flippedCards = [];
+            matchedPairsCount = 0;
+            // Shuffle Level 1 cards
+            level1CardsData = shuffleArray(LEVEL_1_POOLS);
+            
+            const grid = document.getElementById('card-grid');
+            grid.innerHTML = '';
+
+            level1CardsData.forEach((item, index) => {
+                const card = document.createElement('div');
+                card.className = 'flip-card h-28 md:h-32 cursor-pointer perspective-1000';
+                card.dataset.index = index;
+                card.onclick = () => onCardClick(card, item);
+
+                card.innerHTML = `
+                    <div class="flip-card-inner">
+                        <div class="flip-card-front bg-gradient-to-br from-slate-800 to-slate-900 border border-slate-700 hover:border-cyan-400/50 flex flex-col items-center justify-center p-2 rounded-2xl shadow-md">
+                            <i class="fa-solid fa-flask text-2xl text-cyan-400/60 mb-1"></i>
+                            <span class="text-xs text-slate-400 font-bold">ป้ายที่ ${index + 1}</span>
+                        </div>
+                        <div class="flip-card-back bg-gradient-to-br from-cyan-900/90 to-blue-900/90 border-2 border-cyan-400 flex items-center justify-center p-3 rounded-2xl text-center shadow-lg">
+                            <span class="text-xs md:text-sm font-semibold text-white leading-tight">${item.text}</span>
+                        </div>
+                    </div>
+                `;
+                grid.appendChild(card);
+            });
+        }
+
+        function onCardClick(cardElement, item) {
+            // Prevent flipping if already flipped or 2 cards flipped
+            if (cardElement.classList.contains('flipped') || flippedCards.length >= 2) return;
+
+            cardElement.classList.add('flipped');
+            flippedCards.push({ cardElement, item });
+
+            if (flippedCards.length === 2) {
+                const [first, second] = flippedCards;
+                // Check match condition: item.id === pairId
+                if (first.item.id === second.item.pairId) {
+                    // Match!
+                    score += 50;
+                    updateScoreDisplay();
+                    matchedPairsCount++;
+                    flippedCards = [];
+
+                    if (matchedPairsCount === LEVEL_1_POOLS.length / 2) {
+                        setTimeout(() => {
+                            showModal("ผ่านด่านที่ 1!", "เก่งมาก! คุณจับคู่ปฏิกิริยาเคมีถูกต้องทั้งหมด (+200 คะแนน)", "fa-circle-check text-emerald-400");
+                            document.getElementById('btn-next-level').classList.remove('hidden');
+                        }, 500);
+                    }
+                } else {
+                    // Not match -> flip back
+                    setTimeout(() => {
+                        first.cardElement.classList.remove('flipped');
+                        second.cardElement.classList.remove('flipped');
+                        flippedCards = [];
+                    }, 1000);
+                }
+            }
+        }
+
+        /* ================= LEVEL 2 LOGIC ================= */
+        function setupLevel2() {
+            level2Answers = {};
+            const list = document.getElementById('mass-balance-list');
+            list.innerHTML = '';
+
+            const shuffledLevel2 = shuffleArray(LEVEL_2_POOLS);
+
+            shuffledLevel2.forEach((q, idx) => {
+                const itemEl = document.createElement('div');
+                itemEl.className = 'bg-slate-800/80 p-4 rounded-2xl border border-slate-700 flex flex-col md:flex-row md:items-center justify-between gap-4';
+
+                // Shuffle options for each question
+                const shuffledOpts = shuffleArray(q.options);
+
+                let optionsHTML = shuffledOpts.map(val => `
+                    <button onclick="selectLevel2Answer(${q.id}, ${val}, this)" 
+                            class="lvl2-opt-${q.id} px-3 py-1.5 rounded-xl border border-slate-600 bg-slate-700/50 hover:bg-cyan-600/50 text-sm font-bold text-white transition">
+                        ${val} ${q.unit}
+                    </button>
+                `).join('');
+
+                itemEl.innerHTML = `
+                    <div class="space-y-1">
+                        <span class="text-xs text-cyan-400 font-bold uppercase tracking-wider">โจทย์ข้อที่ ${idx + 1}: ${q.title}</span>
+                        <p class="text-sm md:text-base font-semibold text-white">${q.equation}</p>
+                        <p class="text-xs text-amber-300">ระบุมวลของ <span class="underline font-bold">${q.missingField}</span> ให้ถูกต้องตามกฎทรงมวล</p>
+                    </div>
+                    <div class="flex flex-wrap gap-2 items-center">
+                        ${optionsHTML}
+                    </div>
+                `;
+                list.appendChild(itemEl);
+            });
+
+            // Add Check Answers Button for Level 2
+            const checkBtnContainer = document.createElement('div');
+            checkBtnContainer.className = 'mt-4 flex justify-end';
+            checkBtnContainer.innerHTML = `
+                <button onclick="checkLevel2Answers()" class="glass-btn px-6 py-2.5 rounded-xl text-white font-bold flex items-center space-x-2">
+                    <i class="fa-solid fa-calculator"></i>
+                    <span>ตรวจคำตอบมวลสาร</span>
+                </button>
+            `;
+            list.appendChild(checkBtnContainer);
+        }
+
+        function selectLevel2Answer(qId, selectedValue, btnElement) {
+            level2Answers[qId] = selectedValue;
+
+            // Highlight selected button UI
+            document.querySelectorAll(`.lvl2-opt-${qId}`).forEach(btn => {
+                btn.classList.remove('bg-cyan-500', 'border-cyan-300', 'text-white');
+                btn.classList.add('bg-slate-700/50', 'border-slate-600');
+            });
+            btnElement.classList.remove('bg-slate-700/50', 'border-slate-600');
+            btnElement.classList.add('bg-cyan-500', 'border-cyan-300', 'text-white');
+        }
+
+        function checkLevel2Answers() {
+            let correctCount = 0;
+            LEVEL_2_POOLS.forEach(q => {
+                if (level2Answers[q.id] === q.correctValue) {
+                    correctCount++;
+                }
+            });
+
+            if (correctCount === LEVEL_2_POOLS.length) {
+                score += 200;
+                updateScoreDisplay();
+                showModal("ถูกต้องทั้งหมด!", `คำนวณมวลสารถูกต้องทุกข้อ รับคะแนนเพิ่ม 200 คะแนน!`, "fa-circle-check text-emerald-400");
+                document.getElementById('btn-next-level').classList.remove('hidden');
+            } else {
+                showModal("ยังไม่ถูกต้อง", `ตอบถูกต้อง ${correctCount}/${LEVEL_2_POOLS.length} ข้อ ลองคำนวณมวลของสารตั้งต้นและผลิตภัณฑ์อีกครั้ง!`, "fa-triangle-exclamation text-amber-400");
+            }
+        }
+
+        /* ================= LEVEL 3 LOGIC ================= */
+        function setupLevel3() {
+            // Randomize Level 3 Questions and Options
+            level3Questions = shuffleArray(LEVEL_3_POOLS).map(q => {
+                // Shuffle options while keeping track of correct index
+                const originalCorrect = q.options[q.answerIndex];
+                const shuffledOpts = shuffleArray(q.options);
+                const newIndex = shuffledOpts.indexOf(originalCorrect);
+                return {
+                    question: q.question,
+                    options: shuffledOpts,
+                    answerIndex: newIndex
+                };
+            });
+
+            level3CurrentIndex = 0;
+            renderLevel3Question();
+        }
+
+        function renderLevel3Question() {
+            const q = level3Questions[level3CurrentIndex];
+            document.getElementById('quiz-current-num').innerText = level3CurrentIndex + 1;
+            document.getElementById('quiz-progress-percent').innerText = `${((level3CurrentIndex + 1) / 5) * 100}%`;
+            document.getElementById('quiz-progress-bar').style.width = `${((level3CurrentIndex + 1) / 5) * 100}%`;
+
+            document.getElementById('quiz-question').innerText = q.question;
+
+            const optsContainer = document.getElementById('quiz-options');
+            optsContainer.innerHTML = '';
+
+            q.options.forEach((optText, optIdx) => {
+                const optBtn = document.createElement('button');
+                optBtn.className = 'w-full text-left p-4 rounded-xl border border-slate-700 bg-slate-800/80 hover:border-cyan-400 hover:bg-slate-700/60 transition text-sm md:text-base text-slate-200 flex items-center space-x-3 group';
+                optBtn.onclick = () => answerLevel3(optIdx);
+
+                optBtn.innerHTML = `
+                    <span class="w-7 h-7 rounded-lg bg-slate-700 group-hover:bg-cyan-500 text-slate-300 group-hover:text-white flex items-center justify-center text-xs font-bold transition">
+                        ${String.fromCharCode(65 + optIdx)}
+                    </span>
+                    <span class="flex-1">${optText}</span>
+                `;
+                optsContainer.appendChild(optBtn);
+            });
+        }
+
+        function answerLevel3(selectedIndex) {
+            const q = level3Questions[level3CurrentIndex];
+            if (selectedIndex === q.answerIndex) {
+                score += 60;
+                updateScoreDisplay();
+            }
+
+            level3CurrentIndex++;
+            if (level3CurrentIndex < level3Questions.length) {
+                renderLevel3Question();
+            } else {
+                showModal("จบการทดสอบ!", "ทำแบบทดสอบครบทั้ง 5 ข้อเรียบร้อยแล้ว กดปุ่มสรุปคะแนนได้เลย", "fa-flag-checkered text-cyan-400");
+                document.getElementById('btn-next-level').innerText = "ดูสรุปผลคะแนน";
+                document.getElementById('btn-next-level').classList.remove('hidden');
+            }
+        }
+
+        /* ================= THREE.JS AR BACKGROUND SIMULATION ================= */
+        function init3DARBackground() {
+            const container = document.getElementById('ar-canvas-container');
+            const scene = new THREE.Scene();
+            const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+            const renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
+
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            container.appendChild(renderer.domElement);
+
+            // Add 3D Glowing Molecules / Atoms
+            const atomsGroup = new THREE.Group();
+
+            // Molecule 1: Water (H2O) representation
+            const sphereGeo = new THREE.SphereGeometry(0.8, 32, 32);
+            const mainMat = new THREE.MeshPhongMaterial({ color: 0x00d2ff, wireframe: true });
+            const mainAtom = new THREE.Mesh(sphereGeo, mainMat);
+            atomsGroup.add(mainAtom);
+
+            for (let i = 0; i < 15; i++) {
+                const subGeo = new THREE.SphereGeometry(Math.random() * 0.4 + 0.1, 16, 16);
+                const subMat = new THREE.MeshPhongMaterial({
+                    color: Math.random() > 0.5 ? 0xa855f7 : 0xec4899,
+                    transparent: true,
+                    opacity: 0.7
+                });
+                const subAtom = new THREE.Mesh(subGeo, subMat);
+                subAtom.position.set(
+                    (Math.random() - 0.5) * 12,
+                    (Math.random() - 0.5) * 12,
+                    (Math.random() - 0.5) * 12
+                );
+                atomsGroup.add(subAtom);
+            }
+
+            scene.add(atomsGroup);
+
+            // Lighting
+            const light1 = new THREE.PointLight(0x00ffff, 2, 50);
+            light1.position.set(5, 5, 5);
+            scene.add(light1);
+
+            const light2 = new THREE.PointLight(0xff00ff, 1.5, 50);
+            light2.position.set(-5, -5, 5);
+            scene.add(light2);
+
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
+            scene.add(ambientLight);
+
+            camera.position.z = 8;
+
+            // Animation Loop
+            function animate() {
+                requestAnimationFrame(animate);
+                atomsGroup.rotation.x += 0.003;
+                atomsGroup.rotation.y += 0.005;
+                renderer.render(scene, camera);
+            }
+            animate();
+
+            // Handle Resize
+            window.addEventListener('resize', () => {
+                camera.aspect = window.innerWidth / window.innerHeight;
+                camera.updateProjectionMatrix();
+                renderer.setSize(window.innerWidth, window.innerHeight);
+            });
+        }
+
+        // Initialize background on window load
+        window.onload = function() {
+            init3DARBackground();
+        };
+    </script>
+</body>
+</html>
